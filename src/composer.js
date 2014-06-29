@@ -7,30 +7,40 @@ var util = require('util');
 
 module.exports = Composer;
 
+/**
+ * Creates the object for composing a BuildMail instance out from the mail options
+ *
+ * @constructor
+ * @param {Object} mail Mail options
+ */
 function Composer(mail) {
     this.mail = mail || {};
     this.message = false;
 }
 
+/**
+ * Builds BuildMail instance
+ */
 Composer.prototype.compose = function() {
-    this.alternatives = this.getAlternatives();
-    this.htmlNode = this.alternatives.filter(function(alternative) {
+    this._alternatives = this._getAlternatives();
+    this._htmlNode = this._alternatives.filter(function(alternative) {
         return /^text\/html\b/i.test(alternative.contentType);
     }).pop();
-    this.attachments = this.getAttachments(!!this.htmlNode);
+    this._attachments = this._getAttachments(!!this._htmlNode);
 
-    this.useRelated = !!(this.htmlNode && this.attachments.related.length);
-    this.useAlternative = this.alternatives.length > 1;
-    this.useMixed = this.attachments.attached.length > 1 || (this.alternatives.length && this.attachments.attached.length === 1);
+    this._useRelated = !!(this._htmlNode && this._attachments.related.length);
+    this._useAlternative = this._alternatives.length > 1;
+    this._useMixed = this._attachments.attached.length > 1 || (this._alternatives.length && this._attachments.attached.length === 1);
 
-    if (this.useMixed) {
-        this.message = this.createMixed();
-    } else if (this.useAlternative) {
-        this.message = this.createAlternative();
-    } else if (this.useRelated) {
-        this.message = this.createRelated();
+    // Compose MIME tree
+    if (this._useMixed) {
+        this.message = this._createMixed();
+    } else if (this._useAlternative) {
+        this.message = this._createAlternative();
+    } else if (this._useRelated) {
+        this.message = this._createRelated();
     } else {
-        this.message = this.createNode(false, [].concat(this.alternatives || []).concat(this.attachments.attached || []).shift());
+        this.message = this._createContentNode(false, [].concat(this._alternatives || []).concat(this._attachments.attached || []).shift());
     }
 
     // Add headers to the root node
@@ -54,16 +64,44 @@ Composer.prototype.compose = function() {
         }
     }.bind(this));
 
+    // Add custom headers
     if (this.mail.headers) {
         this.message.addHeader(this.mail.headers);
     }
 
+    // Sets custom envelope
     if (this.mail.envelope) {
         this.message.setEnvelope(this.mail.envelope);
     }
 };
 
-Composer.prototype.createMixed = function(parentNode) {
+/**
+ * Sends the composed message using provided transport object
+ *
+ * @param {Object} transporter Nodemailer transport object to deliver the composed e-mail
+ * @param {Function} callback Returns whatever the transport object returns
+ */
+Composer.prototype.send = function(transporter, callback) {
+    var versionString = util.format(
+        '%s (%s; +%s; %s/%s)',
+        packageData.name,
+        packageData.version,
+        packageData.homepage,
+        transporter.name,
+        transporter.version
+    );
+    this.message.setHeader('X-Mailer', versionString);
+    transporter.send(this.message, callback);
+};
+
+/**
+ * Builds multipart/mixed node. It should always contain different type of elements on the same level
+ * eg. text + attachments
+ *
+ * @param {Object} parentNode Parent for this note. If it does not exist, a root node is created
+ * @returns {Object} BuildMail node element
+ */
+Composer.prototype._createMixed = function(parentNode) {
     var node;
 
     if (!parentNode) {
@@ -72,20 +110,27 @@ Composer.prototype.createMixed = function(parentNode) {
         node = parentNode.createChild('multipart/mixed');
     }
 
-    if (this.useAlternative) {
-        this.createAlternative(node);
-    } else if (this.useRelated) {
-        this.createRelated(node);
+    if (this._useAlternative) {
+        this._createAlternative(node);
+    } else if (this._useRelated) {
+        this._createRelated(node);
     }
 
-    [].concat(this.alternatives.length < 2 && this.alternatives || []).concat(this.attachments.attached || []).forEach(function(element) {
-        this.createNode(node, element);
+    [].concat(this._alternatives.length < 2 && this._alternatives || []).concat(this._attachments.attached || []).forEach(function(element) {
+        this._createContentNode(node, element);
     }.bind(this));
 
     return node;
 };
 
-Composer.prototype.createAlternative = function(parentNode) {
+/**
+ * Builds multipart/alternative node. It should always contain same type of elements on the same level
+ * eg. text + html view of the same data
+ *
+ * @param {Object} parentNode Parent for this note. If it does not exist, a root node is created
+ * @returns {Object} BuildMail node element
+ */
+Composer.prototype._createAlternative = function(parentNode) {
     var node;
 
     if (!parentNode) {
@@ -94,18 +139,24 @@ Composer.prototype.createAlternative = function(parentNode) {
         node = parentNode.createChild('multipart/alternative');
     }
 
-    this.alternatives.forEach(function(alternative) {
-        if (this.useRelated && this.htmlNode === alternative) {
-            this.createRelated(node);
+    this._alternatives.forEach(function(alternative) {
+        if (this._useRelated && this._htmlNode === alternative) {
+            this._createRelated(node);
         } else {
-            this.createNode(node, alternative);
+            this._createContentNode(node, alternative);
         }
     }.bind(this));
 
     return node;
 };
 
-Composer.prototype.createRelated = function(parentNode) {
+/**
+ * Builds multipart/related node. It should always contain html node with related attachments
+ *
+ * @param {Object} parentNode Parent for this note. If it does not exist, a root node is created
+ * @returns {Object} BuildMail node element
+ */
+Composer.prototype._createRelated = function(parentNode) {
     var node;
 
     if (!parentNode) {
@@ -114,14 +165,21 @@ Composer.prototype.createRelated = function(parentNode) {
         node = parentNode.createChild('multipart/related; type="text/html"');
     }
 
-    this.createNode(node, this.htmlNode);
+    this._createContentNode(node, this._htmlNode);
 
-    this.attachments.related.forEach(function(alternative) {
-        this.createNode(node, alternative);
+    this._attachments.related.forEach(function(alternative) {
+        this._createContentNode(node, alternative);
     }.bind(this));
 };
 
-Composer.prototype.createNode = function(parentNode, element) {
+/**
+ * Creates a regular node with contents
+ *
+ * @param {Object} parentNode Parent for this note. If it does not exist, a root node is created
+ * @param {Object} element Node data
+ * @returns {Object} BuildMail node element
+ */
+Composer.prototype._createContentNode = function(parentNode, element) {
     var node;
 
     if (!parentNode) {
@@ -147,10 +205,16 @@ Composer.prototype.createNode = function(parentNode, element) {
     return node;
 };
 
-Composer.prototype.getAttachments = function(findRelated) {
+/**
+ * List all attachments. Resulting attachment objects can be used as input for BuildMail nodes
+ *
+ * @param {Boolean} findRelated If true separate related attachments from attached ones
+ * @returns {Object} An object of arrays (`related` and `attached`)
+ */
+Composer.prototype._getAttachments = function(findRelated) {
     var attachments = [].concat(this.mail.attachments || []).map(function(attachment, i) {
         var data = {
-            contentType: attachment.contentType ||  
+            contentType: attachment.contentType ||
                 libmime.detectMimeType(attachment.filename || attachment.filePath || attachment.href || 'bin')
         };
 
@@ -204,7 +268,12 @@ Composer.prototype.getAttachments = function(findRelated) {
     }
 };
 
-Composer.prototype.getAlternatives = function() {
+/**
+ * List alternatives. Resulting objects can be used as input for BuildMail nodes
+ *
+ * @returns {Array} An array of alternative elements. Includes the `text` and `html` values as well
+ */
+Composer.prototype._getAlternatives = function() {
     var alternatives = [];
 
     if (this.mail.text) {
@@ -223,7 +292,7 @@ Composer.prototype.getAlternatives = function() {
 
     [].concat(this.mail.alternatives || []).forEach(function(alternative) {
         var data = {
-            contentType: alternative.contentType ||  
+            contentType: alternative.contentType ||
                 libmime.detectMimeType(alternative.filename || alternative.filePath || alternative.href || 'txt')
         };
 
@@ -252,17 +321,4 @@ Composer.prototype.getAlternatives = function() {
     }.bind(this));
 
     return alternatives;
-};
-
-Composer.prototype.send = function(transporter, callback) {
-    var versionString = util.format(
-        '%s (%s; +%s; %s/%s)',
-        packageData.name,
-        packageData.version,
-        packageData.homepage,
-        transporter.name,
-        transporter.version
-    );
-    this.message.setHeader('X-Mailer', versionString);
-    transporter.send(this.message, callback);
 };
