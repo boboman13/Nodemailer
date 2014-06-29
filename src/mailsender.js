@@ -19,7 +19,7 @@ MailSender.prototype.compose = function() {
 
     this.message.useRelated = !!(this.message.htmlNode && this.message.attachments.related.length);
     this.message.useAlternative = this.message.alternatives.length > 1;
-    this.message.useMixed = this.message.alternatives.length + this.message.attachments.attached.length > 1;
+    this.message.useMixed = this.message.attachments.attached.length > 1 || (this.message.alternatives.length && this.message.attachments.attached.length === 1);
 
     if (this.message.useMixed) {
         this.message.builder = this.createMixed();
@@ -113,7 +113,7 @@ MailSender.prototype.createNode = function(parentNode, element) {
 };
 
 MailSender.prototype.getAttachments = function(findRelated) {
-    var attachments = [].concat(this.mail.attachments || []).map(function(attachment) {
+    var attachments = [].concat(this.mail.attachments || []).map(function(attachment, i) {
         var data = {
             contentType: attachment.contentType ||  
                 libmime.detectMimeType(attachment.filename || attachment.filePath || attachment.href || 'bin')
@@ -121,6 +121,11 @@ MailSender.prototype.getAttachments = function(findRelated) {
 
         if (attachment.filename) {
             data.filename = attachment.filename;
+        } else {
+            data.filename = (attachment.filePath || attachment.href || '').split('/').pop() || 'attachment-' + (i + 1);
+            if (data.filename.indexOf('.') < 0) {
+                data.filename += '.' + libmime.detectExtension(data.contentType);
+            }
         }
 
         if (/^https?:\/\//i.test(attachment.filePath)) {
@@ -141,7 +146,7 @@ MailSender.prototype.getAttachments = function(findRelated) {
                 href: attachment.href
             };
         } else {
-            data.contents = data.contents || '';
+            data.contents = attachment.contents || '';
         }
 
         return data;
@@ -167,17 +172,17 @@ MailSender.prototype.getAttachments = function(findRelated) {
 MailSender.prototype.getAlternatives = function() {
     var alternatives = [];
 
-    if (this.mail.html) {
-        alternatives.push({
-            contentType: 'text/html; charset=utf-8',
-            contents: this.mail.html
-        });
-    }
-
     if (this.mail.text) {
         alternatives.push({
             contentType: 'text/plain; charset=utf-8',
             contents: this.mail.text
+        });
+    }
+
+    if (this.mail.html) {
+        alternatives.push({
+            contentType: 'text/html; charset=utf-8',
+            contents: this.mail.html
         });
     }
 
@@ -205,7 +210,7 @@ MailSender.prototype.getAlternatives = function() {
                 href: alternative.href
             };
         } else {
-            data.contents = data.contents || '';
+            data.contents = alternative.contents || '';
         }
 
         alternatives.push(data);
