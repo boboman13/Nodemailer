@@ -10,23 +10,11 @@ module.exports.createTransport = function(transporter) {
 function Nodemailer(transporter) {
     this.transporter = transporter;
 
-    this.plugins = {
-        html: [],
-        text: [],
-        message: []
-    };
+    //this.transporter.on('log', console.log);
 }
 
-Nodemailer.prototype.use = function(plugin) {
-    Object.keys(plugin || {}).forEach(function(key){
-        if(key in this.plugins){
-            this.plugins.push(plugin[key]);
-        }
-    }.bind(this));
-};
-
 Nodemailer.prototype.sendMail = function(mail, callback) {
-    var sender = new MailSender(mail, this.plugins);
+    var sender = new MailSender(mail);
     sender.compose();
     sender.send(this.transporter, callback);
 };

@@ -2,21 +2,20 @@
 
 var BuildMail = require('buildmail');
 var libmime = require('libmime');
-var stream = require('stream');
-var fs = require('fs');
 
-function MailSender(mail, plugins) {
+module.exports = MailSender;
+
+function MailSender(mail) {
     this.mail = mail || {};
-    this.plugins = plugins || {};
     this.message = {};
 }
 
 MailSender.prototype.compose = function() {
-    this.message.attachments = this.getAttachments();
+    this.message.alternatives = this.getAlternatives();
     this.message.htmlNode = this.message.alternatives.filter(function(alternative) {
         return /^text\/html\b/i.test(alternative.contentType);
     }).pop();
-    this.message.alternatives = this.getAlternatives(!!this.message.htmlNode);
+    this.message.attachments = this.getAttachments(!!this.message.htmlNode);
 
     this.message.useRelated = !!(this.message.htmlNode && this.message.attachments.related.length);
     this.message.useAlternative = this.message.alternatives.length > 1;
@@ -29,7 +28,7 @@ MailSender.prototype.compose = function() {
     } else if (this.message.useRelated) {
         this.message.builder = this.createRelated();
     } else {
-        // FIXME: add remaining nodes. Should be only one
+        this.message.builder = this.createNode(false, [].concat(this.message.alternatives || []).concat(this.message.attachments.attached || []).shift());
     }
 };
 
@@ -48,7 +47,9 @@ MailSender.prototype.createMixed = function(parentNode) {
         this.createRelated(node);
     }
 
-    // FIXME: add other nodes
+    [].concat(this.message.alternatives.length < 2 && this.message.alternatives || []).concat(this.message.attachments.attached || []).forEach(function(element) {
+        this.createNode(node, element);
+    }.bind(this));
 
     return node;
 };
@@ -63,16 +64,10 @@ MailSender.prototype.createAlternative = function(parentNode) {
     }
 
     this.message.alternatives.forEach(function(alternative) {
-        var child;
-
         if (this.message.useRelated && this.message.htmlNode === alternative) {
             this.createRelated(node);
         } else {
-            child = node.createChild(alternative.contentType, {
-                filename: alternative.filename
-            });
-
-            child.setContent(alternative.contents);
+            this.createNode(node, alternative);
         }
     }.bind(this));
 
@@ -91,20 +86,31 @@ MailSender.prototype.createRelated = function(parentNode) {
     node.createChild(this.message.htmlNode.contentType).setContent(this.message.htmlNode.contents);
 
     this.message.attachments.related.forEach(function(alternative) {
-        var child;
-
-        child = node.createChild(alternative.contentType, {
-            filename: alternative.filename
-        });
-
-        if (alternative.cid) {
-            child.setHeader('Content-Id', '<' + alternative.cid.replace(/[<>]/g, '') + '>');
-        }
-
-        child.setContent(alternative.contents);
+        this.createNode(node, alternative);
     }.bind(this));
 };
 
+MailSender.prototype.createNode = function(parentNode, element) {
+    var node;
+
+    if (!parentNode) {
+        node = new BuildMail(element.contentType, {
+            filename: element.filename
+        });
+    } else {
+        node = parentNode.createChild(element.contentType, {
+            filename: element.filename
+        });
+    }
+
+    if (element.cid) {
+        node.setHeader('Content-Id', '<' + element.cid.replace(/[<>]/g, '') + '>');
+    }
+
+    node.setContent(element.contents);
+
+    return node;
+};
 
 MailSender.prototype.getAttachments = function(findRelated) {
     var attachments = [].concat(this.mail.attachments || []).map(function(attachment) {
@@ -209,5 +215,5 @@ MailSender.prototype.getAlternatives = function() {
 };
 
 MailSender.prototype.send = function(transporter, callback) {
-    transporter.send(this.message.getEnvelope(), this.message.createReadStream(), callback);
+    transporter.send(this.message.builder.getEnvelope(), this.message.builder.createReadStream(), callback);
 };
