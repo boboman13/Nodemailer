@@ -4,7 +4,9 @@ var packageData = require('../package.json');
 var EventEmitter = require('events').EventEmitter;
 var utillib = require('util');
 
-module.exports = StubTransport;
+module.exports = function(options) {
+    return new StubTransport(options);
+};
 
 function StubTransport(options) {
     EventEmitter.call(this);

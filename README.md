@@ -1,6 +1,11 @@
 ![Nodemailer](https://raw2.github.com/andris9/Nodemailer/master/assets/nm_logo_200x136.png)
 
-Send emails from Node.js
+Send emails from Node.js, easy as cake.
+
+## Gigabyte attachments
+
+Version 1.0 is a total rewrite from the ground up and relying heavily on Streams2. This allows you to reliably
+send messages with gigabyte attachments even through a slow network connection without CPU or memory penalties. You probably do not need to but if you'd like for some reason it is totally possible.
 
 ## License
 

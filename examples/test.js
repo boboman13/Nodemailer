@@ -1,9 +1,7 @@
 'use strict';
 
 var nodemailer = require('../src/nodemailer');
-var StubTransport = require('../src/stub-transport');
-
-var transport = nodemailer.createTransport(new StubTransport());
+var transport = nodemailer.createTransport(nodemailer.stubTransport());
 
 transport.on('log', function(log) {
     console.error(

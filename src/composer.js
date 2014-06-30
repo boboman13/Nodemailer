@@ -1,9 +1,7 @@
 'use strict';
 
-var packageData = require('../package.json');
 var BuildMail = require('buildmail');
 var libmime = require('libmime');
-var util = require('util');
 
 module.exports = Composer;
 
@@ -73,25 +71,8 @@ Composer.prototype.compose = function() {
     if (this.mail.envelope) {
         this.message.setEnvelope(this.mail.envelope);
     }
-};
 
-/**
- * Sends the composed message using provided transport object
- *
- * @param {Object} transporter Nodemailer transport object to deliver the composed e-mail
- * @param {Function} callback Returns whatever the transport object returns
- */
-Composer.prototype.send = function(transporter, callback) {
-    var versionString = util.format(
-        '%s (%s; +%s; %s/%s)',
-        packageData.name,
-        packageData.version,
-        packageData.homepage,
-        transporter.name,
-        transporter.version
-    );
-    this.message.setHeader('X-Mailer', versionString);
-    transporter.send(this.message, callback);
+    return this.message;
 };
 
 /**
