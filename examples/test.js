@@ -3,6 +3,43 @@
 var nodemailer = require('../src/nodemailer');
 var transport = nodemailer.createTransport(nodemailer.stubTransport());
 
+var stream = require('stream');
+var Transform = stream.Transform;
+
+var compileplugin = function(mail, callback) {
+    if (!mail.data.headers) {
+        mail.data.headers = {};
+    }
+    console.log(1);
+    mail.data.headers['X-SSS'] = 'õuaõua';
+    return callback(null, mail);
+};
+
+var sendplugin = function(mail, callback) {
+    var transform = new Transform();
+    var chunks = [];
+    var chunklen = 0;
+
+    transform._transform = function(chunk, encoding, done) {
+        if (encoding !== 'buffer') {
+            chunk = new Buffer(chunk, encoding);
+        }
+
+        chunks.push(chunk);
+        chunklen += chunk.length;
+        done();
+    };
+
+    transform._flush = function(done) {
+        var message = Buffer.concat(chunks, chunklen).toString('binary');
+        this.push(message.replace(/[a-z]/g, 'z'));
+        done();
+    };
+
+    mail.message.use(transform);
+    return callback(null, mail);
+};
+
 transport.on('log', function(log) {
     console.error(
         '%s: %s',
@@ -10,6 +47,14 @@ transport.on('log', function(log) {
         log.message.replace(/\r?\n$/, '').replace(/\n/g, '\n' + new Array(log.type.length + 3).join(' '))
     );
 });
+
+transport.use('compile', compileplugin);
+transport.use('send', require('nodemailer-dkim').signer({
+    domainName: 'node.ee',
+    keySelector: 'dkim',
+    privateKey: require('fs').readFileSync(__dirname + '/test_private.pem')
+}));
+//transport.use('send', sendplugin);
 
 transport.sendMail({
     from: '"Sender Name" <sender@example.com>',

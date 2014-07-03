@@ -1,6 +1,6 @@
 'use strict';
 
-var Composer = require('./composer');
+var Compiler = require('./compiler');
 var EventEmitter = require('events').EventEmitter;
 var util = require('util');
 var packageData = require('../package.json');
@@ -27,6 +27,11 @@ function Nodemailer(transporter) {
         return;
     }
 
+    this._plugins = {
+        compile: [],
+        send: []
+    };
+
     this.transporter = transporter;
 
     this.transporter.on('log', function() {
@@ -41,13 +46,22 @@ function Nodemailer(transporter) {
 }
 util.inherits(Nodemailer, EventEmitter);
 
+Nodemailer.prototype.use = function(compileStep, plugin) {
+    compileStep = (compileStep || '').toString();
+    if (!this._plugins.hasOwnProperty(compileStep)) {
+        this._plugins[compileStep] = [plugin];
+    } else {
+        this._plugins[compileStep].push(plugin);
+    }
+};
+
 /**
  * Sends an email using the preselected transport object
  *
- * @param {Object} mail E-mail description
+ * @param {Object} data E-data description
  * @param {Function} callback Callback to run once the sending succeeded or failed
  */
-Nodemailer.prototype.sendMail = function(mail, callback) {
+Nodemailer.prototype.sendMail = function(data, callback) {
     var versionString = util.format(
         '%s (%s; +%s; %s/%s)',
         packageData.name,
@@ -57,12 +71,52 @@ Nodemailer.prototype.sendMail = function(mail, callback) {
         this.transporter.version
     );
 
-    var composer = new Composer(mail);
-    var message = composer.compose();
+    this._processPlugins('compile', {
+        data: data
+    }, function(err, mail) {
+        if (err) {
+            return callback(err);
+        }
 
-    if (mail.Xmailer !== false) {
-        message.setHeader('X-Mailer', mail.Xmailer || versionString);
+        var message = new Compiler(mail.data).compile();
+
+        if (mail.data.Xmailer !== false) {
+            message.setHeader('X-Mailer', mail.data.Xmailer || versionString);
+        }
+
+        this._processPlugins('send', {
+            data: mail.data,
+            message: message
+        }, function(err, mail) {
+            if (err) {
+                return callback(err);
+            }
+            this.transporter.send(mail.message, callback);
+        }.bind(this));
+    }.bind(this));
+};
+
+Nodemailer.prototype._processPlugins = function(compileStep, mail, callback) {
+    compileStep = (compileStep || '').toString();
+
+    if (!this._plugins.hasOwnProperty(compileStep) || !this._plugins[compileStep].length) {
+        return callback(null, mail);
     }
 
-    this.transporter.send(message, callback);
+    var plugins = Array.prototype.slice.call(this._plugins[compileStep]);
+
+    var processPlugins = function(mail) {
+        if (!plugins.length) {
+            return callback(null, mail);
+        }
+        var plugin = plugins.shift();
+        plugin(mail, function(err, data) {
+            if (err) {
+                return callback(err);
+            }
+            processPlugins(data);
+        });
+    }.bind(this);
+
+    processPlugins(mail);
 };

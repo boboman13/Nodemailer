@@ -3,7 +3,7 @@
 var BuildMail = require('buildmail');
 var libmime = require('libmime');
 
-module.exports = Composer;
+module.exports = Compiler;
 
 /**
  * Creates the object for composing a BuildMail instance out from the mail options
@@ -11,7 +11,7 @@ module.exports = Composer;
  * @constructor
  * @param {Object} mail Mail options
  */
-function Composer(mail) {
+function Compiler(mail) {
     this.mail = mail || {};
     this.message = false;
 }
@@ -19,7 +19,7 @@ function Composer(mail) {
 /**
  * Builds BuildMail instance
  */
-Composer.prototype.compose = function() {
+Compiler.prototype.compile = function() {
     this._alternatives = this._getAlternatives();
     this._htmlNode = this._alternatives.filter(function(alternative) {
         return /^text\/html\b/i.test(alternative.contentType);
@@ -82,7 +82,7 @@ Composer.prototype.compose = function() {
  * @param {Object} parentNode Parent for this note. If it does not exist, a root node is created
  * @returns {Object} BuildMail node element
  */
-Composer.prototype._createMixed = function(parentNode) {
+Compiler.prototype._createMixed = function(parentNode) {
     var node;
 
     if (!parentNode) {
@@ -111,7 +111,7 @@ Composer.prototype._createMixed = function(parentNode) {
  * @param {Object} parentNode Parent for this note. If it does not exist, a root node is created
  * @returns {Object} BuildMail node element
  */
-Composer.prototype._createAlternative = function(parentNode) {
+Compiler.prototype._createAlternative = function(parentNode) {
     var node;
 
     if (!parentNode) {
@@ -137,7 +137,7 @@ Composer.prototype._createAlternative = function(parentNode) {
  * @param {Object} parentNode Parent for this note. If it does not exist, a root node is created
  * @returns {Object} BuildMail node element
  */
-Composer.prototype._createRelated = function(parentNode) {
+Compiler.prototype._createRelated = function(parentNode) {
     var node;
 
     if (!parentNode) {
@@ -160,7 +160,7 @@ Composer.prototype._createRelated = function(parentNode) {
  * @param {Object} element Node data
  * @returns {Object} BuildMail node element
  */
-Composer.prototype._createContentNode = function(parentNode, element) {
+Compiler.prototype._createContentNode = function(parentNode, element) {
     var node;
 
     if (!parentNode) {
@@ -192,7 +192,7 @@ Composer.prototype._createContentNode = function(parentNode, element) {
  * @param {Boolean} findRelated If true separate related attachments from attached ones
  * @returns {Object} An object of arrays (`related` and `attached`)
  */
-Composer.prototype._getAttachments = function(findRelated) {
+Compiler.prototype._getAttachments = function(findRelated) {
     var attachments = [].concat(this.mail.attachments || []).map(function(attachment, i) {
         var data = {
             contentType: attachment.contentType ||
@@ -254,7 +254,7 @@ Composer.prototype._getAttachments = function(findRelated) {
  *
  * @returns {Array} An array of alternative elements. Includes the `text` and `html` values as well
  */
-Composer.prototype._getAlternatives = function() {
+Compiler.prototype._getAlternatives = function() {
     var alternatives = [];
 
     if (this.mail.text) {
