@@ -2,6 +2,7 @@
 
 var nodemailer = require('../src/nodemailer');
 var transport = nodemailer.createTransport(nodemailer.stubTransport());
+var markdown = require('nodemailer-markdown').markdown;
 
 var stream = require('stream');
 var Transform = stream.Transform;
@@ -10,7 +11,6 @@ var compileplugin = function(mail, callback) {
     if (!mail.data.headers) {
         mail.data.headers = {};
     }
-    console.log(1);
     mail.data.headers['X-SSS'] = 'õuaõua';
     return callback(null, mail);
 };
@@ -48,6 +48,9 @@ transport.on('log', function(log) {
     );
 });
 
+transport.use('compile', markdown({
+    useEmbeddedImages: true
+}));
 transport.use('compile', compileplugin);
 transport.use('send', require('nodemailer-dkim').signer({
     domainName: 'node.ee',
@@ -74,13 +77,9 @@ transport.sendMail({
         'x-my-key': 1,
         'x-my-other-key': 2
     },
-    html: '<p>aaa <img src="cid:tere@tere"> bbb</p>\n',
-    text: 'tere tere',
+    markdown: '# Nodemailer\n\n![alt](' + __dirname + '../../assets/nm_logo_100x68.png)',
     attachments: [{
         filePath: __dirname + '/test.js'
-    }, {
-        cid: 'tere@tere',
-        filePath: __dirname + '/../assets/nm_logo_100x68.png'
     }],
     encoding: 'quoted-printable'
 }, function(err, message) {
