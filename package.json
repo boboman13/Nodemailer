@@ -34,7 +34,7 @@
     "simplesmtp": "^0.3.32"
   },
   "dependencies": {
-    "buildmail": "^0.1.6",
+    "buildmail": "^0.1.7",
     "libmime": "^0.1.1"
   }
 }
